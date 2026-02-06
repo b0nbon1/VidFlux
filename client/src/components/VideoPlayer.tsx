@@ -4,12 +4,19 @@ import "videojs-hls-quality-selector";
 import "video.js/dist/video-js.css";
 import httpSourceSelector from "videojs-http-source-selector";
 
-const VideoPlayer = ({ src }) => {
-  const videoRef = useRef(null);
-  const playerRef = useRef(null);
+interface VideoPlayerProps {
+  src: string;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type VideoJsPlayer = ReturnType<typeof videojs> & { [key: string]: any };
+
+const VideoPlayer = ({ src }: VideoPlayerProps) => {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const playerRef = useRef<VideoJsPlayer | null>(null);
 
   useEffect(() => {
-    if (!playerRef.current) {
+    if (!playerRef.current && videoRef.current) {
       playerRef.current = videojs(videoRef.current, {
         controls: true,
         autoplay: true,
@@ -18,26 +25,32 @@ const VideoPlayer = ({ src }) => {
         html5: {
           vhs: {
             enableLowInitialPlaylist: true,
+            smoothQualityChange: true,
+            fastQualityChange: true,
+            handlePartialData: true,
+            llhls: false,
           },
           hls: {
             overrideNative: true,
             limitRenditionByPlayerDimensions: true,
-            useDevicePixelRatio: true
-            // bandwidth: 16777216,
+            useDevicePixelRatio: true,
           },
           nativeAudioTracks: false,
           nativeVideoTracks: false,
-          useBandwidthFromLocalStorage: true
+          useBandwidthFromLocalStorage: true,
+        },
+        liveTracker: {
+          trackingThreshold: 0,
+          liveTolerance: Infinity,
         },
         controlBar: {
-          pictureInPictureToggle: false
+          pictureInPictureToggle: false,
         },
-        // height: "480px"
-      });
+      }) as VideoJsPlayer;
 
       // Register the quality selector plugin
       videojs.registerPlugin("httpSourceSelector", httpSourceSelector);
-      playerRef.current.httpSourceSelector(); // Enable the plugin
+      playerRef.current.httpSourceSelector();
 
       // Load HLS source
       playerRef.current.src({
@@ -45,9 +58,11 @@ const VideoPlayer = ({ src }) => {
         type: "application/x-mpegURL",
       });
 
-      playerRef.current.ready(() => {
-        playerRef.current.hlsQualitySelector({
-          displayCurrentQuality: true, // Shows selected quality
+      const player = playerRef.current;
+      
+      player.ready(() => {
+        player.hlsQualitySelector({
+          displayCurrentQuality: true,
         });
       });
     }

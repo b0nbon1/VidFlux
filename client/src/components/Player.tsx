@@ -1,59 +1,17 @@
 "use client";
 
-import { useRef, useState } from "react";
-import React from "react";
-import videojs from "video.js";
+import { useSearchParams } from "next/navigation";
 import VideoPlayer from "./VideoPlayer";
 
 function Player() {
-  const [res, setRes] = useState(720);
+  const searchParams = useSearchParams();
+  const videoId = searchParams.get("v");
 
-  const videoSrc = "http://127.0.0.1:4500/static/videos/6vqlLY/master.m3u8";
+  if (!videoId) {
+    return <p>No video ID provided. Use ?v=VIDEO_ID in the URL.</p>;
+  }
 
-  const playerRef = useRef(null);
-
-  const videoJsOptions = {
-    autoplay: true,
-    controls: true,
-    responsive: true,
-    fluid: true,
-    html5: {
-      hls: {
-        overrideNative: true,
-        limitRenditionByPlayerDimensions: true,
-        useDevicePixelRatio: true
-        // bandwidth: 16777216,
-      },
-      nativeAudioTracks: false,
-      nativeVideoTracks: false,
-      useBandwidthFromLocalStorage: true
-    },
-    sources: [
-      {
-        src: videoSrc,
-        type: 'application/x-mpegURL',
-      },
-    ],
-    controlBar: {
-      pictureInPictureToggle: false
-    }
-  };
-
-  const handlePlayerReady = (player) => {
-    playerRef.current = player;
-
-    // You can handle player events here, for example:
-    player.on('waiting', () => {
-      videojs.log('player is waiting');
-    });
-
-    player.on('dispose', () => {
-      videojs.log('player will dispose');
-    });
-    // player.on('ready', () => {
-    //   player.httpSourceSelector();
-    // })
-  };
+  const videoSrc = `http://127.0.0.1:4500/static/videos/${videoId}/master.m3u8`;
 
   return (
     <>
