@@ -280,6 +280,9 @@ func CompleteUpload(c *fiber.Ctx) error {
 		os.RemoveAll(session.TempPath)
 	}()
 
+	// Create encoding job for tracking
+	GetTracker().CreateJob(videoID)
+
 	// Start HLS conversion
 	go func() {
 		hlsConversionWithResolutions(finalFilename, folder, videoID)

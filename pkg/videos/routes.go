@@ -16,11 +16,13 @@ func VideosRoutes(router fiber.Router) {
 	router.Get(prefix+"/:videoid/segment/:segment", stream.FetchSegments)
 	router.Get(prefix+"/:videoid/playlist/:playlist", stream.FetchPlaylist)
 
+	// Encoding status endpoint
+	router.Get(prefix+"/encoding/:videoid/status", stream.GetEncodingStatus)
+
 	// Resumable upload endpoints
 	router.Post(prefix+"/upload/init", stream.InitUpload)
 	router.Put(prefix+"/upload/:uploadId/chunk/:chunkIndex", stream.UploadChunk)
 	router.Get(prefix+"/upload/:uploadId/status", stream.GetUploadStatus)
 	router.Post(prefix+"/upload/:uploadId/complete", stream.CompleteUpload)
 	router.Delete(prefix+"/upload/:uploadId", stream.CancelUpload)
-	
 }

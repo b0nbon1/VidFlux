@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import styles from "./upload.module.css";
 
 const API_BASE = "http://127.0.0.1:4500/api/v1/videos";
@@ -14,13 +14,24 @@ interface UploadSession {
 
 interface UploadState {
   file: File | null;
-  status: "idle" | "uploading" | "paused" | "processing" | "complete" | "error";
+  status: "idle" | "uploading" | "paused" | "processing" | "encoding" | "complete" | "error";
   progress: number;
   uploadedChunks: number;
   totalChunks: number;
   videoId: string | null;
   error: string | null;
   speed: string;
+}
+
+interface EncodingStatus {
+  video_id: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  progress: number;
+  current_time: number;
+  total_duration: number;
+  speed: number;
+  eta_seconds: number;
+  error?: string;
 }
 
 export default function UploadPage() {
@@ -36,10 +47,67 @@ export default function UploadPage() {
   });
 
   const [isDragging, setIsDragging] = useState(false);
+  const [encodingProgress, setEncodingProgress] = useState<EncodingStatus | null>(null);
   const sessionRef = useRef<UploadSession | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const isPausedRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const encodingPollRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (encodingPollRef.current) {
+        clearInterval(encodingPollRef.current);
+      }
+    };
+  }, []);
+
+  const pollEncodingStatus = useCallback((videoId: string) => {
+    // Clear any existing polling
+    if (encodingPollRef.current) {
+      clearInterval(encodingPollRef.current);
+    }
+
+    const poll = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/encoding/${videoId}/status`);
+        if (!response.ok) {
+          return;
+        }
+
+        const data: EncodingStatus = await response.json();
+        setEncodingProgress(data);
+
+        if (data.status === "completed") {
+          if (encodingPollRef.current) {
+            clearInterval(encodingPollRef.current);
+            encodingPollRef.current = null;
+          }
+          setUploadState((prev) => ({
+            ...prev,
+            status: "complete",
+          }));
+        } else if (data.status === "failed") {
+          if (encodingPollRef.current) {
+            clearInterval(encodingPollRef.current);
+            encodingPollRef.current = null;
+          }
+          setUploadState((prev) => ({
+            ...prev,
+            status: "error",
+            error: data.error || "Encoding failed",
+          }));
+        }
+      } catch (error) {
+        console.error("Error polling encoding status:", error);
+      }
+    };
+
+    // Poll immediately, then every 2 seconds
+    poll();
+    encodingPollRef.current = setInterval(poll, 2000);
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -262,9 +330,11 @@ export default function UploadPage() {
     if (videoId) {
       setUploadState((prev) => ({
         ...prev,
-        status: "complete",
+        status: "encoding",
         videoId,
       }));
+      // Start polling for encoding status
+      pollEncodingStatus(videoId);
     } else {
       setUploadState((prev) => ({
         ...prev,
@@ -331,6 +401,18 @@ export default function UploadPage() {
     return (
       parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
     );
+  };
+
+  const formatETA = (seconds: number): string => {
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    if (seconds < 3600) {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.round(seconds % 60);
+      return `${mins}m ${secs}s`;
+    }
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    return `${hours}h ${mins}m`;
   };
 
   const { file, status, progress, uploadedChunks, totalChunks, videoId, error, speed } =
@@ -401,7 +483,7 @@ export default function UploadPage() {
         )}
       </div>
 
-      {file && status !== "complete" && (
+      {file && status !== "complete" && status !== "encoding" && (
         <div className={styles.progressSection}>
           <div className={styles.progressBar}>
             <div
@@ -424,6 +506,30 @@ export default function UploadPage() {
         <div className={styles.processing}>
           <div className={styles.spinner} />
           <span>Processing video for streaming...</span>
+        </div>
+      )}
+
+      {status === "encoding" && (
+        <div className={styles.progressSection}>
+          <div className={styles.progressBar}>
+            <div
+              className={styles.progressFill}
+              style={{ width: `${encodingProgress?.progress ?? 0}%` }}
+            />
+          </div>
+          <div className={styles.progressInfo}>
+            <span>
+              Encoding: {Math.round(encodingProgress?.progress ?? 0)}%
+            </span>
+            {encodingProgress?.speed && encodingProgress.speed > 0 && (
+              <span>{encodingProgress.speed.toFixed(1)}x speed</span>
+            )}
+          </div>
+          {encodingProgress?.eta_seconds && encodingProgress.eta_seconds > 0 && (
+            <div className={styles.progressInfo}>
+              <span>ETA: {formatETA(encodingProgress.eta_seconds)}</span>
+            </div>
+          )}
         </div>
       )}
 

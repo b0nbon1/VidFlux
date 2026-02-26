@@ -20,3 +20,6 @@ sqlc:
 
 dev:
 	go run main.go
+
+client-dev:
+	cd client && npm run dev
